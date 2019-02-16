@@ -66,12 +66,12 @@
    :a "Lit_a" :b "Lit_b" :c "Lit_c" :d "Lit_d" :e "Lit_e" :f "Lit_f" :g "Lit_g"
    :h "Lit_h" :i "Lit_i" :j "Lit_j" :k "Lit_k" :l "Lit_l" :m "Lit_m" :n "Lit_n"
    :o "Lit_o" :p "Lit_p" :q "Lit_q" :r "Lit_r" :s "Lit_s" :t "Lit_t" :u "Lit_u"
-   :v "Lit_v" :x "Lit_x" :y "Lit_y" :z "Lit_z"
+   :v "Lit_v" :w "Lit_w" :x "Lit_x" :y "Lit_y" :z "Lit_z"
 
    :A "Lit_A" :B "Lit_B" :C "Lit_C" :D "Lit_D" :E "Lit_E" :F "Lit_F" :G "Lit_G"
    :H "Lit_H" :I "Lit_I" :J "Lit_J" :K "Lit_K" :L "Lit_L" :M "Lit_M" :N "Lit_N"
    :O "Lit_O" :P "Lit_P" :Q "Lit_Q" :R "Lit_R" :S "Lit_S" :T "Lit_T" :U "Lit_U"
-   :V "Lit_V" :X "Lit_X" :Y "Lit_Y" :Z "Lit_Z"
+   :V "Lit_V" :W "Lit_W" :X "Lit_X" :Y "Lit_Y" :Z "Lit_Z"
 
    :home "home" :select "select" :back "back" :enter "enter" :play "play"
    :left "left" :right "right" :up "up" :down "down" :volume-up "volumeup"
@@ -80,5 +80,10 @@
 
 (defn press-keys [roku-addr keys]
   (map #(http/post (str roku-addr "/keypress/" ((keyword %) remote-keys))) keys))
+
+(defn type-str [roku-addr s]
+  (->> (seq s)
+       (map #((keyword (str %)) remote-keys))
+       (map #(http/post (str roku-addr "/keypress/" %)))))
 
 
