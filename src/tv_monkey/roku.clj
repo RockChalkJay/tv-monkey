@@ -1,20 +1,31 @@
 (ns tv-monkey.roku
   (:require [clojure.core.async :as a]
-            [clj-http.client :as http])
+            [clj-http.client :as http]
+            [clojure.xml :as xml]
+            [clojure.string :as str])
   (:import [java.net DatagramSocket
                      DatagramPacket
                      InetAddress
                      SocketException]))
+
+(defn device-info [roku-addr]
+  (http/get (str roku-addr "/query/device-info")))
+
+(defn- raw->device [raw]
+  (let [addr (second (re-find #"LOCATION: (.*)/" raw))
+        device-info-str (str/replace (:body (device-info addr)) #"\t" "")
+        device-xml (xml/parse (java.io.ByteArrayInputStream. (.getBytes device-info-str)))]
+
+    (->> (:content device-xml)
+        (map #(conj {} {(:tag %) (first (:content %))}))
+        (reduce conj {})
+        (merge {:url addr}))))
 
 (def discovery-msg
   (str "M-SEARCH * HTTP/1.1\r\n"
        "Host: 239.255.255.250:1900\r\n"
        "Man: \"ssdp:discover\"\r\n"
        "ST: roku:ecp\r\n"))
-
-(defn- raw->device [raw]
-  {:usn (second (re-find #"USN: (.*)/" raw))
-   :url (second (re-find #"LOCATION: (.*)/" raw))})
 
 (defn discover
   "Blocking fn that sends a SSDP discovery and loops to receive responses.
@@ -66,7 +77,6 @@
    :left "left" :right "right" :up "up" :down "down" :volume-up "volumeup"
    :volume-down "volumedown" :mute "volumemute" :power-off "poweroff"
    })
-
 
 (defn press-keys [roku-addr keys]
   (map #(http/post (str roku-addr "/keypress/" ((keyword %) remote-keys))) keys))
