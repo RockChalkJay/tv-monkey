@@ -6,7 +6,8 @@
   (:import [java.net DatagramSocket
                      DatagramPacket
                      InetAddress
-                     SocketException]))
+                     SocketException
+                     URLEncoder]))
 
 (defn device-info [roku-addr]
   (http/get (str roku-addr "/query/device-info")))
@@ -17,9 +18,9 @@
         device-xml (xml/parse (java.io.ByteArrayInputStream. (.getBytes device-info-str)))]
 
     (->> (:content device-xml)
-        (map #(conj {} {(:tag %) (first (:content %))}))
-        (reduce conj {})
-        (merge {:url addr}))))
+         (map #(conj {} {(:tag %) (first (:content %))}))
+         (reduce conj {})
+         (merge {:url addr}))))
 
 (def discovery-msg
   (str "M-SEARCH * HTTP/1.1\r\n"
@@ -61,29 +62,36 @@
             roku-devices)
           (recur (conj roku-devices device)))))))
 
-(def remote-keys
-  {
-   :a "Lit_a" :b "Lit_b" :c "Lit_c" :d "Lit_d" :e "Lit_e" :f "Lit_f" :g "Lit_g"
-   :h "Lit_h" :i "Lit_i" :j "Lit_j" :k "Lit_k" :l "Lit_l" :m "Lit_m" :n "Lit_n"
-   :o "Lit_o" :p "Lit_p" :q "Lit_q" :r "Lit_r" :s "Lit_s" :t "Lit_t" :u "Lit_u"
-   :v "Lit_v" :w "Lit_w" :x "Lit_x" :y "Lit_y" :z "Lit_z"
+(def special-fn-keys {:home           "Home"
+                      :fwd            "Fwd"
+                      :rev            "Rev"
+                      :select         "Select"
+                      :back           "Back"
+                      :backspace      "Backspace"
+                      :search         "Search"
+                      :enter          "Enter"
+                      :play           "Play"
+                      :left           "Left"
+                      :right          "Right"
+                      :up             "Up"
+                      :down           "Down"
+                      :instant-replay "InstantReplay"
+                      :volume-up      "volumeup"
+                      :volume-down    "volumedown"
+                      :mute           "volumemute"
+                      :power-on       "PowerOn"
+                      :power-off      "PowerOff"})
 
-   :A "Lit_A" :B "Lit_B" :C "Lit_C" :D "Lit_D" :E "Lit_E" :F "Lit_F" :G "Lit_G"
-   :H "Lit_H" :I "Lit_I" :J "Lit_J" :K "Lit_K" :L "Lit_L" :M "Lit_M" :N "Lit_N"
-   :O "Lit_O" :P "Lit_P" :Q "Lit_Q" :R "Lit_R" :S "Lit_S" :T "Lit_T" :U "Lit_U"
-   :V "Lit_V" :W "Lit_W" :X "Lit_X" :Y "Lit_Y" :Z "Lit_Z"
+(defn key->roku-value [key]
+  (if (keyword? key)
+    (key special-fn-keys)
+    (str "Lit_" (URLEncoder/encode key "UTF-8"))))
 
-   :home "home" :select "select" :back "back" :enter "enter" :play "play"
-   :left "left" :right "right" :up "up" :down "down" :volume-up "volumeup"
-   :volume-down "volumedown" :mute "volumemute" :power-off "poweroff"
-   })
-
-(defn press-keys [roku-addr keys]
-  (map #(http/post (str roku-addr "/keypress/" ((keyword %) remote-keys))) keys))
+(defn press-keys [roku-addr keys-coll]
+  (map #(http/post (str roku-addr "/keypress/" (key->roku-value %))) keys-coll))
 
 (defn type-str [roku-addr s]
-  (->> (seq s)
-       (map #((keyword (str %)) remote-keys))
-       (map #(http/post (str roku-addr "/keypress/" %)))))
+  (->> (map str (seq s))
+       (press-keys roku-addr)))
 
 
