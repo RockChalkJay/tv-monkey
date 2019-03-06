@@ -7,20 +7,26 @@
                      DatagramPacket
                      InetAddress
                      SocketException
-                     URLEncoder]))
+                     URLEncoder]
+           [java.io ByteArrayInputStream]))
+
+(defn- parse-roku-resp [resp]
+  (-> (:body resp)
+      (str/replace #"\t" "")
+      (.getBytes)
+      (ByteArrayInputStream.)
+      (xml/parse)
+      :content))
 
 (defn device-info [roku-addr]
-  (http/get (str roku-addr "/query/device-info")))
+  (-> (http/get (str roku-addr "/query/device-info"))
+      (parse-roku-resp)
+      (->> (map #(conj {} {(:tag %) (first (:content %))}))
+           (reduce conj {}))))
 
 (defn- raw->device [raw]
-  (let [addr (second (re-find #"LOCATION: (.*)/" raw))
-        device-info-str (str/replace (:body (device-info addr)) #"\t" "")
-        device-xml (xml/parse (java.io.ByteArrayInputStream. (.getBytes device-info-str)))]
-
-    (->> (:content device-xml)
-         (map #(conj {} {(:tag %) (first (:content %))}))
-         (reduce conj {})
-         (merge {:url addr}))))
+  (let [addr (second (re-find #"LOCATION: (.*)/" raw))]
+    (merge (device-info addr) {:url addr})))
 
 (def discovery-msg
   (str "M-SEARCH * HTTP/1.1\r\n"
@@ -45,22 +51,30 @@
     ;;Loop and read responses
     (loop [roku-devices []]
       (a/go
-        (do
-          (try
-            (.receive sock packet)
-            (->> (String. (.getData packet) 0 (.getLength packet))
-                 (raw->device)
-                 (a/>! c))
-            (catch SocketException se
-              ;;just eat the exception. It's most likely caused by
-              ;;closing the socket on timeout
-              ))))
+        (try
+          (.receive sock packet)
+          (->> (String. (.getData packet) 0 (.getLength packet))
+               (raw->device)
+               (a/>! c))
+          (catch SocketException se
+            ;;just eat the exception. It's most likely caused by
+            ;;closing the socket on timeout
+            )))
       (let [device (first (a/alts!! [c (a/timeout 1000)]))]
         (if (nil? device)
           (do
             (.close sock)
             roku-devices)
           (recur (conj roku-devices device)))))))
+
+(defn query-apps [roku-addr]
+  (-> (http/get (str roku-addr "/query/apps"))
+      (parse-roku-resp)
+      (->> (map (fn [app-data]
+                  (-> (:content app-data)
+                      first
+                      (->> (assoc {} :name))
+                      (merge (:attrs app-data))))))))
 
 (def special-fn-keys {:home           "Home"
                       :fwd            "Fwd"
